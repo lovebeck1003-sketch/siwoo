@@ -150,7 +150,6 @@ const SLIDE_MAX  = 0.30;     // 최대 미끄럼 각도(rad) ≈ 17°
 // 자동 주행 — 조향 이득 / 목표 속도 / 커브에서 줄이는 정도
 const AUTO_GAIN = 2.6, AUTO_TOP = 46.7, AUTO_CURVE_SLOW = 26;
 const RT_SS = 1.4;           // 후처리 렌더타깃 배율(수퍼샘플링). 낮추면 가볍고 거칠어진다
-const BRAKE_FORCE = 18;      // 브레이크(스페이스) 감속도 m/s² — 크면 더 빨리 선다
 const GROUND_SLACK = 0.06;  // 차가 지면 위로 뜰 수 있는 최대 높이(서스펜션 여유)
 const CRUISE = 46.7;       // 손 떼면 일반 최고속(계기판 100)까지 유지
 const SEA_DROP = 9;        // 도로면 대비 해수면 깊이
@@ -2031,12 +2030,8 @@ function loop() {
   }
   const braking = keys.Space || (throttle < 0 && car.speed > 1);
   if (keys.Space) {
-    // 지수 감쇠만 쓰면 0 에 점근할 뿐 끝내 멈추지 않아서 계속 앞으로 스멀스멀 갔다.
-    // 감쇠에 더해 일정한 제동력(BRAKE_FORCE)을 빼고, 아주 느려지면 완전히 세운다.
-    car.speed *= Math.pow(0.06, dt);
-    const drop = BRAKE_FORCE * dt;
-    car.speed = Math.abs(car.speed) <= drop ? 0
-              : car.speed - Math.sign(car.speed) * drop;
+    // 브레이크는 그 자리에서 즉시 세운다 — 서서히 미끄러져 나가지 않는다.
+    car.speed = 0;
   }
   car.speed = Math.max(-topSpeed * 0.35, Math.min(topSpeed, car.speed));
 
