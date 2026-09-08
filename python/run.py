@@ -56,6 +56,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
+    def send_head(self):
+        # no-store 를 보내도 브라우저가 If-Modified-Since 를 붙여 되물으면
+        # 기본 핸들러가 304 를 돌려주고, 브라우저는 캐시에 있던 옛 파일을 쓴다.
+        # 조건부 요청 헤더를 지워 늘 본문을 새로 내려보낸다.
+        del self.headers["If-Modified-Since"]
+        del self.headers["If-None-Match"]
+        return super().send_head()
+
 
 class Server(socketserver.ThreadingTCPServer):
     """연결마다 스레드 — 브라우저가 keep-alive 로 연결을 붙들고 있어도 다른 요청이 막히지 않는다.
