@@ -1600,11 +1600,8 @@ scene.add(snow);
 // ═══════════════════════════════════════════════════════════
 const keys = {};
 let camMode = 0, timeScale = 1, hudOn = true, lightsManual = null;
-let autoDrive = false;      // Z — 도로를 따라 스스로 달린다
-// Z 를 누른 순간 이미 W 를 밟고 있으면 '수동 조작'으로 오인해 곧장 꺼졌다.
-// 켠 뒤 입력이 한 번 0 으로 돌아오기 전까지는 해제 판정을 미룬다.
-let autoArmed = false;
-const CAM_NAMES = ['체이스', '1인칭', '탑뷰', '시네마틱'];
+let autoDrive = false;      // Z — 도로를 따라 스스로 달린다. 끄는 것도 Z 로만 한다.
+const CAM_NAMES = ['체이스', '1인칭', '시네마틱'];
 
 addEventListener('keydown', e => {
   keys[e.code] = true;
@@ -1614,7 +1611,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyT') { timeScale = timeScale === 1 ? 12 : timeScale === 12 ? 60 : 1; toast('시간 ×' + timeScale); }
   if (e.code === 'KeyF') { lightsManual = lightsManual === null ? true : lightsManual ? false : null;
     toast('헤드라이트 · ' + (lightsManual === null ? '자동' : lightsManual ? '켬' : '끔')); }
-  if (e.code === 'KeyZ') { autoDrive = !autoDrive; autoArmed = false; toast('자동 주행 · ' + (autoDrive ? '켬' : '끔')); }
+  if (e.code === 'KeyZ') { autoDrive = !autoDrive; toast('자동 주행 · ' + (autoDrive ? '켬' : '끔')); }
   if (e.code === 'KeyH') { hudOn = !hudOn; document.getElementById('hud').style.display = hudOn ? '' : 'none'; }
   if (e.code === 'KeyP') { postOn = !postOn && !!sceneRT; toast('화면 효과 · ' + (postOn ? '켬' : '끔')); }
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
@@ -1793,23 +1790,19 @@ function loop() {
   // 순수 추종(pure pursuit): 앞쪽 일정 거리의 '차로 위 한 점'을 정하고 그쪽을 향하도록 꺾는다.
   // 조향 입력을 만들어 낼 뿐이라 아래 물리는 손대지 않는다 = 사람이 몰 때와 똑같이 굴러간다.
   if (autoDrive) {
-    if (!throttle && !steerIn) autoArmed = true;          // 손을 뗐다 = 이제부터 개입을 감지한다
-    if (autoArmed && (throttle || steerIn)) { autoDrive = false; toast('자동 주행 · 끔 (수동 조작)'); }
-    else {
-      // 빠를수록 멀리 본다 — 가까이만 보면 좌우로 갈지자를 그린다
-      const look = 11 + Math.abs(car.speed) * 0.62;
-      const tz = car.z + look;
-      const tdx = (roadX(tz + 1) - roadX(tz - 1)) / 2;
-      // 우측 차로 한가운데를 목표로 잡는다(중앙선 오른쪽)
-      const tx = roadX(tz) + (ROAD_HALF * 0.5) / Math.hypot(1, tdx);
-      let err = Math.atan2(tx - car.x, tz - car.z) - car.heading;
-      err = Math.atan2(Math.sin(err), Math.cos(err));      // -π~π 로 감아 준다
-      steerIn = Math.max(-1, Math.min(1, err * AUTO_GAIN));
-      // 커브가 급하면 미리 속도를 줄인다 — 코너 감속에 떠밀리지 않고 스스로 제어한다
-      const curve = Math.abs(roadX(car.z + 60) - 2 * roadX(car.z + 30) + roadX(car.z)) / 900;
-      const want = Math.min(CRUISE, AUTO_TOP / (1 + curve * AUTO_CURVE_SLOW));
-      throttle = Math.abs(car.speed) < want ? 1 : 0;
-    }
+    // 빠를수록 멀리 본다 — 가까이만 보면 좌우로 갈지자를 그린다
+    const look = 11 + Math.abs(car.speed) * 0.62;
+    const tz = car.z + look;
+    const tdx = (roadX(tz + 1) - roadX(tz - 1)) / 2;
+    // 우측 차로 한가운데를 목표로 잡는다(중앙선 오른쪽)
+    const tx = roadX(tz) + (ROAD_HALF * 0.5) / Math.hypot(1, tdx);
+    let err = Math.atan2(tx - car.x, tz - car.z) - car.heading;
+    err = Math.atan2(Math.sin(err), Math.cos(err));      // -π~π 로 감아 준다
+    steerIn = Math.max(-1, Math.min(1, err * AUTO_GAIN));
+    // 커브가 급하면 미리 속도를 줄인다 — 코너 감속에 떠밀리지 않고 스스로 제어한다
+    const curve = Math.abs(roadX(car.z + 60) - 2 * roadX(car.z + 30) + roadX(car.z)) / 900;
+    const want = Math.min(CRUISE, AUTO_TOP / (1 + curve * AUTO_CURVE_SLOW));
+    throttle = Math.abs(car.speed) < want ? 1 : 0;
   }
 
   const carU = roadU(car.x, car.z);
@@ -2044,7 +2037,9 @@ function loop() {
 
   // ── 카메라
   const sp = Math.abs(car.speed);
-  interior.visible = (camMode === 1);   // 실내는 1인칭에서만 보여준다
+  // 1인칭에서는 실내만 남긴다 — 외장을 그대로 두면 카메라가 차체 안에 박혀 앞이 가린다
+  interior.visible = (camMode === 1);
+  if (carBody) carBody.visible = (camMode !== 1);
   camera.up.set(0, 1, 0);
 
   if (camMode === 1) {
@@ -2056,12 +2051,6 @@ function loop() {
                   _pos.y + 0.6,
                   _pos.z + Math.cos(car.heading) * 40);
     camPos.copy(camera.position);      // 다른 시점으로 돌아갈 때 튀지 않도록 최근 위치를 남긴다
-  } else if (camMode === 2) {
-    // 탑뷰 — 차 바로 위에서 내려다본다. 진행 방향이 화면 위로 오게 카메라를 돌린다.
-    camPos.lerp(_pos.set(car.x, car.y + 26, car.z - 0.01), Math.min(1, dt * 5));
-    camera.position.copy(camPos);
-    camera.up.set(Math.sin(car.heading), 0, Math.cos(car.heading));
-    camera.lookAt(car.x, car.y, car.z);
   } else if (camMode === 0) {
     // 차 바로 뒤·낮은 눈높이. 속도가 붙으면 아주 조금만 뒤로 밀린다.
     const back = 5.9 + Math.min(0.8, sp * 0.02) + (boost ? 0.5 : 0);   // 속도로 뒤로 밀리는 양을 줄였다
